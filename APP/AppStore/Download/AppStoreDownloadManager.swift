@@ -12,7 +12,8 @@ import UIKit
 import ZipArchive
 #endif
 
-
+// 导入自定义弹窗组件
+// import APP.AppStore降级.UI.UnpurchasedAlert // 暂时注释，实际项目中应该使用正确的导入路径
 
 // 为了避免与StoreRequest.swift中的类型冲突，这里使用不同的名称
 struct DownloadStoreItem {
@@ -52,6 +53,9 @@ class IPAProcessor: @unchecked Sendable {
         withSinfs sinfs: [Any], // 使用Any类型避免编译错误
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
+        print("🔧 [IPA处理器] 开始处理IPA文件: \(ipaPath.path)")
+        print("🔧 [IPA处理器] 签名信息数量: \(sinfs.count)")
+        
         // 在后台队列中处理
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -77,18 +81,20 @@ class IPAProcessor: @unchecked Sendable {
             // 清理临时目录
             try? FileManager.default.removeItem(at: tempDir)
         }
-                
+        
+        print("🔧 [IPA处理器] 创建临时工作目录: \(tempDir.path)")
+        
         // 解压IPA文件
         let extractedDir = try extractIPA(at: ipaPath, to: tempDir)
-
+        print("🔧 [IPA处理器] IPA文件解压完成: \(extractedDir.path)")
         
         // 创建SC_Info文件夹和签名文件
         try createSCInfoFolder(in: extractedDir, withSinfs: sinfs)
-
+        print("🔧 [IPA处理器] SC_Info文件夹创建完成")
         
         // 重新打包IPA文件
         let processedIPA = try repackIPA(from: extractedDir, originalPath: ipaPath)
-
+        print("🔧 [IPA处理器] IPA文件重新打包完成: \(processedIPA.path)")
         
         return processedIPA
     }
@@ -104,6 +110,7 @@ class IPAProcessor: @unchecked Sendable {
         guard success else {
             throw NSError(domain: "IPAProcessing", code: 1, userInfo: [NSLocalizedDescriptionKey: "ZipArchive解压失败"])
         }
+        print("🔧 [IPA处理器] 使用ZipArchive成功解压IPA文件")
         #else
         // 如果没有ZipArchive，抛出错误
         throw NSError(domain: "IPAProcessing", code: 1, userInfo: [NSLocalizedDescriptionKey: "ZipArchive库未找到，请正确配置依赖"])
@@ -126,37 +133,49 @@ class IPAProcessor: @unchecked Sendable {
             throw NSError(domain: "IPAProcessing", code: 3, userInfo: [NSLocalizedDescriptionKey: "未找到.app文件夹"])
         }
         
-
+        print("🔧 [IPA处理器] 找到应用文件夹: \(appFolder.lastPathComponent)")
         
         // 创建SC_Info文件夹
         let scInfoDir = appFolder.appendingPathComponent("SC_Info")
         try FileManager.default.createDirectory(at: scInfoDir, withIntermediateDirectories: true)
+        print("🔧 [IPA处理器] 创建SC_Info文件夹: \(scInfoDir.path)")
         
         // 为每个sinf创建对应的.sinf文件
+        print("🔧 [IPA处理器] 开始处理 \(sinfs.count) 个sinf数据")
+        
         if sinfs.isEmpty {
-
+            print("⚠️ [IPA处理器] 没有sinf数据，创建默认的.sinf文件")
             // 创建默认的.sinf文件，使用应用名称作为文件名
             let appName = appFolder.lastPathComponent.replacingOccurrences(of: ".app", with: "")
             let defaultSinfFileName = "\(appName).sinf"
             let defaultSinfFilePath = scInfoDir.appendingPathComponent(defaultSinfFileName)
             
-
+            print("🔧 [IPA处理器] 准备创建默认sinf文件:")
+            print("   - 应用名称: \(appName)")
+            print("   - 文件名: \(defaultSinfFileName)")
+            print("   - 完整路径: \(defaultSinfFilePath.path)")
             
             // 创建默认的sinf数据（这是一个示例数据，实际应该从StoreItem获取）
             let defaultSinfData = createDefaultSinfData(for: appName)
             
-
+            print("🔧 [IPA处理器] 默认sinf数据创建完成，大小: \(ByteCountFormatter().string(fromByteCount: Int64(defaultSinfData.count)))")
             
             // 写入文件
             try defaultSinfData.write(to: defaultSinfFilePath)
             
             // 验证文件是否真的被创建了
-            if !FileManager.default.fileExists(atPath: defaultSinfFilePath.path) {
-                throw NSError(domain: "IPAProcessing", code: 4, userInfo: [NSLocalizedDescriptionKey: "文件创建失败: \(defaultSinfFilePath.path)"])
+            if FileManager.default.fileExists(atPath: defaultSinfFilePath.path) {
+                let fileSize = try FileManager.default.attributesOfItem(atPath: defaultSinfFilePath.path)[.size] as? Int64 ?? 0
+                print("✅ [IPA处理器] 成功创建默认签名文件: \(defaultSinfFileName)")
+                print("   - 文件路径: \(defaultSinfFilePath.path)")
+                print("   - 文件大小: \(ByteCountFormatter().string(fromByteCount: fileSize))")
+                print("   - 文件确实存在: ✅")
+            } else {
+                print("❌ [IPA处理器] 文件创建失败，文件不存在: \(defaultSinfFilePath.path)")
             }
         } else {
             for (index, sinf) in sinfs.enumerated() {
-
+                print("🔧 [IPA处理器] 处理第 \(index + 1) 个sinf，类型: \(type(of: sinf))")
                 
                 // 处理不同类型的sinf数据
                 let id: Int
@@ -166,15 +185,17 @@ class IPAProcessor: @unchecked Sendable {
                     // 使用本地DownloadSinfInfo类型
                     id = sinfInfo.id
                     sinfString = sinfInfo.sinf
-
+                    print("🔧 [IPA处理器] 使用DownloadSinfInfo类型，ID: \(id)")
                 } else if let sinfDict = sinf as? [String: Any],
                           let sinfId = sinfDict["id"] as? Int,
                           let sinfData = sinfDict["sinf"] as? String {
                     // 兼容字典类型
                     id = sinfId
                     sinfString = sinfData
-
+                    print("🔧 [IPA处理器] 使用字典类型，ID: \(id)")
                 } else {
+                    print("⚠️ [IPA处理器] 警告: 无效的sinf数据格式: \(type(of: sinf))")
+                    print("⚠️ [IPA处理器] sinf内容: \(sinf)")
                     continue
                 }
                 
@@ -194,22 +215,33 @@ class IPAProcessor: @unchecked Sendable {
                 
                 // 写入.sinf文件
                 try sinfData.write(to: sinfFilePath)
-
+                print("✅ [IPA处理器] 成功创建签名文件: \(sinfFileName)")
+                print("   - 文件路径: \(sinfFilePath.path)")
+                print("   - 文件大小: \(ByteCountFormatter().string(fromByteCount: Int64(sinfData.count)))")
+                print("   - 二进制数据长度: \(sinfData.count) 字节")
             }
             
+            print("🔧 [IPA处理器] sinf文件处理完成，共处理 \(sinfs.count) 个文件")
         }
         
+
         
         // 创建iTunesMetadata.plist文件（在IPA根目录）
         try createiTunesMetadataPlist(in: extractedDir, appFolder: appFolder)
+        print("🔧 [IPA处理器] 创建iTunesMetadata.plist文件")
         
         // 强制检查：确保至少有一个.sinf文件存在
         let sinfFiles = try FileManager.default.contentsOfDirectory(at: scInfoDir, includingPropertiesForKeys: nil)
         let sinfFileCount = sinfFiles.filter { $0.pathExtension == "sinf" }.count
         
-
+        print("🔧 [IPA处理器] SC_Info目录最终检查:")
+        print("   - 目录路径: \(scInfoDir.path)")
+        print("   - 总文件数: \(sinfFiles.count)")
+        print("   - .sinf文件数: \(sinfFileCount)")
         
         if sinfFileCount == 0 {
+            print("❌ [IPA处理器] 警告：没有找到任何.sinf文件！")
+            print("🔧 [IPA处理器] 强制创建默认.sinf文件...")
             
             let appName = appFolder.lastPathComponent.replacingOccurrences(of: ".app", with: "")
             let defaultSinfFileName = "\(appName).sinf"
@@ -218,7 +250,9 @@ class IPAProcessor: @unchecked Sendable {
             let defaultSinfData = createDefaultSinfData(for: appName)
             try defaultSinfData.write(to: defaultSinfFilePath)
             
-
+            print("✅ [IPA处理器] 强制创建默认sinf文件成功: \(defaultSinfFileName)")
+        } else {
+            print("✅ [IPA处理器] 确认.sinf文件存在，数量: \(sinfFileCount)")
         }
     }
     
@@ -258,7 +292,7 @@ class IPAProcessor: @unchecked Sendable {
         var checksumBytes = checksum
         sinfData.append(Data(bytes: &checksumBytes, count: MemoryLayout<UInt8>.size))
         
-
+        print("🔧 [IPA处理器] 创建默认sinf数据，大小: \(ByteCountFormatter().string(fromByteCount: Int64(sinfData.count)))")
         
         return sinfData
     }
@@ -280,7 +314,7 @@ class IPAProcessor: @unchecked Sendable {
                     appInfo = plist
                 }
             } catch {
-                // Info.plist读取失败，使用默认值
+                print("⚠️ [IPA处理器] 无法读取Info.plist: \(error)")
             }
         }
         
@@ -324,6 +358,7 @@ class IPAProcessor: @unchecked Sendable {
         )
         
         try plistData.write(to: metadataPath)
+        print("🔧 [IPA处理器] 成功创建iTunesMetadata.plist，大小: \(ByteCountFormatter().string(fromByteCount: Int64(plistData.count)))")
     }
     
     /// 重新打包IPA文件
@@ -337,6 +372,7 @@ class IPAProcessor: @unchecked Sendable {
         guard success else {
             throw NSError(domain: "IPAProcessing", code: 4, userInfo: [NSLocalizedDescriptionKey: "IPA重新打包失败"])
         }
+        print("🔧 [IPA处理器] 使用ZipArchive成功重新打包IPA文件")
         #else
         // 如果没有ZipArchive，抛出错误
         throw NSError(domain: "IPAProcessing", code: 4, userInfo: [NSLocalizedDescriptionKey: "ZipArchive库未找到，请正确配置依赖"])
@@ -391,8 +427,14 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         completion: @escaping @Sendable (Result<DownloadResult, DownloadError>) -> Void
     ) {
         let downloadId = UUID().uuidString
+        print("📥 [下载管理器] 开始下载应用: \(appIdentifier)")
+        print("📥 [下载管理器] 下载ID: \(downloadId)")
+        print("📥 [下载管理器] 目标路径: \(destinationURL.path)")
+        print("📥 [下载管理器] 应用版本: \(appVersion ?? "最新版本")")
+        print("📥 [下载管理器] 账户信息: 已传入账户对象")
         Task { @MainActor in
             do {
+                print("🔍 [下载管理器] 正在获取下载信息...")
                 // 首先从商店API获取下载信息
                 // 使用反射获取 account 的各个字段
                 let mirror = Mirror(reflecting: account)
@@ -422,7 +464,9 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                     }
                 }
                 
-
+                print("🔍 [账户信息] dsPersonId: \(dsPersonId)")
+                print("🔍 [账户信息] passwordToken: \(passwordToken.isEmpty ? "空" : "已获取")")
+                print("🔍 [账户信息] storeFront: \(storeFront)")
                 
                 // 直接调用下载API，获取真实的 sinf 数据，包含认证信息
                 let plistResponse = try await downloadFromStoreAPI(
@@ -439,13 +483,33 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                 
                 if let songList = plistResponse["songList"] as? [[String: Any]], !songList.isEmpty {
                     let firstSongItem = songList[0]
+                    print("✅ [下载管理器] 成功获取下载信息")
+                    print("   - 下载URL: \(firstSongItem["URL"] as? String ?? "未知")")
+                    print("   - MD5: \(firstSongItem["md5"] as? String ?? "未知")")
                     
-                    // 检查真实的 sinf 数据 - 实际使用中会在convertToDownloadStoreItem中处理
+                    // 检查真实的 sinf 数据
+                    if let sinfs = firstSongItem["sinfs"] as? [[String: Any]] {
+                        print("   - 真实Sinf数量: \(sinfs.count)")
+                        for (index, sinf) in sinfs.enumerated() {
+                            if let sinfData = sinf["sinf"] as? String {
+                                print("   - Sinf \(index + 1): 长度 \(sinfData.count) 字符 (真实数据)")
+                            }
+                        }
+                    } else {
+                        print("   - 警告: 没有找到 sinf 数据")
+                    }
                     
                     // 将响应数据转换为DownloadStoreItem
                     downloadStoreItem = convertToDownloadStoreItem(from: firstSongItem)
                 } else {
                     // 处理未购买应用的情况
+                    print("⚠️ [下载管理器] songList为空，用户可能未购买此应用")
+                    
+                    // 检查是否有failureType和customerMessage
+                    if let failureType = plistResponse["failureType"] as? String, 
+                       let customerMessage = plistResponse["customerMessage"] as? String {
+                        print("⚠️ [下载管理器] 响应包含错误: \(failureType) - \(customerMessage)")
+                    }
                     
                     // 应用未购买，直接返回失败状态
                     let error: DownloadError = .licenseError("应用未购买，请先前往App Store购买")
@@ -478,7 +542,6 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
             }
         }
     }
-
     /// 恢复已暂停的下载
     /// - 参数:
     ///   - downloadId: 下载标识符
@@ -497,7 +560,6 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         completionHandlers[downloadId] = completion
         task.resume()
     }
-    
     /// 暂停一个下载
     /// - 参数:
     ///   - downloadId: 下载标识符
@@ -532,14 +594,21 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
     
     /// 将StoreItem转换为DownloadStoreItem，确保使用真实的 sinf 数据
     private func convertToDownloadStoreItem(from storeItem: Any) -> DownloadStoreItem {
+        print("🔍 [转换开始] 开始解析StoreItem数据")
+        print("🔍 [转换开始] StoreItem类型: \(type(of: storeItem))")
         
         // 检查是否是字典类型
         if let dict = storeItem as? [String: Any] {
+            print("🔍 [转换开始] 检测到字典类型，直接访问键值")
             
             // 直接访问字典键值
             let url = dict["URL"] as? String ?? ""
             let md5 = dict["md5"] as? String ?? ""
-                        
+            
+            print("🔍 [转换开始] 从字典获取:")
+            print("   - URL: \(url.isEmpty ? "空" : "已获取(\(url.count)字符)")")
+            print("   - MD5: \(md5.isEmpty ? "空" : "已获取(\(md5.count)字符)")")
+            
             // 获取元数据
             var bundleId = "unknown"
             var bundleDisplayName = "Unknown App"
@@ -556,13 +625,20 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                 }
                 softwareVersionExternalIdentifiers = metadata["softwareVersionExternalIdentifiers"] as? [Int] ?? []
                 
-
+                print("🔍 [转换开始] 从metadata获取:")
+                print("   - Bundle ID: \(bundleId)")
+                print("   - Display Name: \(bundleDisplayName)")
+                print("   - Version: \(bundleShortVersionString)")
+                print("   - External ID: \(softwareVersionExternalIdentifier)")
             }
             
             // 获取真实的 sinf 数据
             var sinfs: [DownloadSinfInfo] = []
             if let sinfsArray = dict["sinfs"] as? [[String: Any]] {
+                print("🔍 [转换开始] 发现sinfs数组，长度: \(sinfsArray.count)")
+                
                 for (index, sinfDict) in sinfsArray.enumerated() {
+                    print("🔍 [转换开始] 解析 Sinf \(index + 1):")
                     
                     // 获取 sinf ID
                     let sinfId = sinfDict["id"] as? Int ?? index
@@ -595,13 +671,21 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                             )
                             sinfs.append(sinfInfo)
                             print("✅ [转换开始] 成功添加 Sinf \(index + 1)，ID: \(sinfId)，数据长度: \(finalSinfData.count)")
-                        } 
+                        } else {
+                            print("⚠️ [转换开始] Sinf \(index + 1) 数据无效，跳过")
+                        }
+                    } else {
+                        print("⚠️ [转换开始] Sinf \(index + 1) 没有 sinf 字段")
                     }
                 }
-            } 
+            } else {
+                print("⚠️ [转换开始] 没有找到 sinfs 数组或格式错误")
+            }
             
             // 验证必要字段
             guard !url.isEmpty && !md5.isEmpty else {
+                print("❌ [转换失败] 无法获取URL或MD5")
+                print("🔍 [转换开始] 字典内容: \(dict)")
                 return createDefaultDownloadStoreItem()
             }
             
@@ -613,7 +697,14 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                 softwareVersionExternalIdentifiers: softwareVersionExternalIdentifiers
             )
             
-
+            print("✅ [转换成功] 解析到以下数据:")
+            print("   - URL: \(url)")
+            print("   - MD5: \(md5)")
+            print("   - Bundle ID: \(bundleId)")
+            print("   - Display Name: \(bundleDisplayName)")
+            print("   - 真实sinf数量: \(sinfs.count)")
+            
+            print("✅ [转换完成] 成功创建DownloadStoreItem，包含真实的 Apple ID 签名数据")
             return DownloadStoreItem(
                 url: url,
                 md5: md5,
@@ -621,6 +712,7 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
                 metadata: downloadMetadata
             )
         } else {
+            print("❌ [转换失败] StoreItem不是字典类型")
             return createDefaultDownloadStoreItem()
         }
     }
@@ -654,6 +746,7 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
             }
             return
         }
+        print("🚀 [下载开始] URL: \(downloadURL.absoluteString)")
         let downloadId = UUID().uuidString
         var request = URLRequest(url: downloadURL)
         // 添加必要的请求头以确保下载稳定性
@@ -670,7 +763,7 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         downloadDestinations[downloadId] = destinationURL
         downloadStoreItems[downloadId] = storeItem // 这里存储的是转换后的DownloadStoreItem
         completionHandlers[downloadId] = completion
-
+        print("📥 [下载任务] ID: \(downloadId) 已创建并启动")
         downloadTask.resume()
     }
     /// 验证下载文件的完整性
@@ -692,7 +785,7 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         lastUIUpdate.removeValue(forKey: downloadId)
         downloadDestinations.removeValue(forKey: downloadId)
         downloadStoreItems.removeValue(forKey: downloadId)
-
+        print("🧹 [清理完成] 下载任务 \(downloadId) 的所有资源已清理")
     }
     /// 从Apple Store API获取真实的下载信息，包含真实的 sinf 数据
     private func downloadFromStoreAPI(
@@ -702,6 +795,7 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         passwordToken: String,
         storeFront: String
     ) async throws -> [String: Any] {
+        print("🔍 [Store API] 开始获取真实的下载信息...")
         
         // 构建请求URL
         let guid = generateGUID()
@@ -739,15 +833,21 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
             options: 0
         )
         request.httpBody = plistData
-                
+        
+        print("🔍 [Store API] 发送请求到: \(url.absoluteString)")
+        print("🔍 [Store API] 请求体: \(body)")
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw DownloadError.networkError(NSError(domain: "StoreAPI", code: -1, userInfo: [NSLocalizedDescriptionKey: "无效的HTTP响应"]))
         }
-                
+        
+        print("🔍 [Store API] 响应状态码: \(httpResponse.statusCode)")
+        
         if httpResponse.statusCode != 200 {
             let errorMessage = String(data: data, encoding: .utf8) ?? "未知错误"
+            print("❌ [Store API] 请求失败: \(errorMessage)")
             throw DownloadError.networkError(NSError(domain: "StoreAPI", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
         }
         
@@ -757,6 +857,48 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
             options: [],
             format: nil
         ) as? [String: Any] ?? [:]
+        
+        print("🔍 [Store API] 响应包含键: \(Array(plist.keys).sorted())")
+        
+        // 详细调试：检查 songList 结构
+        if let songList = plist["songList"] as? [[String: Any]], !songList.isEmpty {
+            print("🔍 [Store API] 找到 songList，包含 \(songList.count) 个项目")
+            
+            let firstSong = songList[0]
+            print("🔍 [Store API] 第一个 song 项目的键: \(Array(firstSong.keys).sorted())")
+            
+            // 检查 sinfs 字段
+            if let sinfs = firstSong["sinfs"] as? [[String: Any]], !sinfs.isEmpty {
+                print("✅ [Store API] 成功获取真实的 sinf 数据，数量: \(sinfs.count)")
+                for (index, sinf) in sinfs.enumerated() {
+                    print("🔍 [Store API] Sinf \(index + 1) 的键: \(Array(sinf.keys).sorted())")
+                    if let sinfData = sinf["sinf"] as? String {
+                        print("🔍 [Store API] Sinf \(index + 1): 长度 \(sinfData.count) 字符")
+                        print("🔍 [Store API] Sinf \(index + 1) 前100字符: \(String(sinfData.prefix(100)))")
+                    } else {
+                        print("⚠️ [Store API] Sinf \(index + 1): sinf 字段类型错误: \(type(of: sinf["sinf"]))")
+                    }
+                }
+            } else {
+                print("⚠️ [Store API] 没有找到 sinf 数据")
+                print("🔍 [Store API] sinfs 字段类型: \(type(of: firstSong["sinfs"]))")
+                if let sinfsRaw = firstSong["sinfs"] {
+                    print("🔍 [Store API] sinfs 原始值: \(sinfsRaw)")
+                }
+            }
+            
+            // 检查其他重要字段
+            print("🔍 [Store API] URL 字段: \(firstSong["URL"] ?? "未找到")")
+            print("🔍 [Store API] md5 字段: \(firstSong["md5"] ?? "未找到")")
+            print("🔍 [Store API] metadata 字段类型: \(type(of: firstSong["metadata"]))")
+            
+            if let metadata = firstSong["metadata"] as? [String: Any] {
+                print("🔍 [Store API] metadata 键: \(Array(metadata.keys).sorted())")
+            }
+        } else {
+            print("⚠️ [Store API] songList 为空或格式错误")
+            print("🔍 [Store API] songList 类型: \(type(of: plist["songList"]))")
+        }
         
         // 返回原始 plist 数据
         return plist
@@ -783,7 +925,6 @@ class AppStoreDownloadManager: NSObject, ObservableObject, URLSessionDownloadDel
         }
     }
 }
-
 // MARK: - URLSessionDownloadDelegate
 extension AppStoreDownloadManager {
     func urlSession(
@@ -796,11 +937,14 @@ extension AppStoreDownloadManager {
               let completion = completionHandlers[downloadId],
               let destinationURL = downloadDestinations[downloadId],
               let storeItem = downloadStoreItems[downloadId] else {
+            print("❌ [下载完成] 无法找到下载任务ID、完成处理器、目标URL或storeItem")
             return
         }
-
+        print("📁 [临时文件] 下载完成，临时文件位置: \(location.path)")
+        print("📂 [目标位置] 将移动到: \(destinationURL.path)")
         // 检查临时文件是否存在
         guard FileManager.default.fileExists(atPath: location.path) else {
+            print("❌ [临时文件] 文件不存在: \(location.path)")
             DispatchQueue.main.async {
                 completion(.failure(.fileSystemError("临时下载文件不存在")))
             }
@@ -813,13 +957,16 @@ extension AppStoreDownloadManager {
             let targetDirectory = destinationURL.deletingLastPathComponent()
             if !FileManager.default.fileExists(atPath: targetDirectory.path) {
                 try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true, attributes: nil)
+                print("📁 [目录创建] 已创建目标目录: \(targetDirectory.path)")
             }
             // 如果目标文件已存在，先删除
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)
+                print("🗑️ [文件清理] 已删除现有文件: \(destinationURL.path)")
             }
             // 移动文件
             try FileManager.default.moveItem(at: location, to: destinationURL)
+            print("✅ [文件移动] 成功移动到: \(destinationURL.path)")
             // 创建包含完整信息的结果
             let result = DownloadResult(
                 downloadId: downloadId,
@@ -835,23 +982,52 @@ extension AppStoreDownloadManager {
                 sinfs: storeItem.sinfs,
                 expectedMD5: storeItem.md5
             )
-
+            print("✅ [下载完成] 文件大小: \(ByteCountFormatter().string(fromByteCount: downloadTask.countOfBytesReceived))")
+            
+            // 处理IPA文件，添加SC_Info文件夹和签名信息
+            print("🔧 [下载完成] 开始处理IPA文件...")
+            print("🔧 [下载完成] 签名信息数量: \(storeItem.sinfs.count)")
+            
+            // 调试：检查storeItem的详细信息
+            print("🔍 [调试] storeItem详细信息:")
+            print("   - URL: \(storeItem.url)")
+            print("   - MD5: \(storeItem.md5)")
+            print("   - Bundle ID: \(storeItem.metadata.bundleId)")
+            print("   - Display Name: \(storeItem.metadata.bundleDisplayName)")
+            print("   - Version: \(storeItem.metadata.bundleShortVersionString)")
+            print("   - Sinf数量: \(storeItem.sinfs.count)")
+            
+            for (index, sinf) in storeItem.sinfs.enumerated() {
+                print("   - Sinf \(index + 1): ID=\(sinf.id), 数据长度=\(sinf.sinf.count)")
+            }
+            
+            // 无论是否有签名信息，都要处理IPA文件，确保创建.sinf文件
+            print("🔧 [下载完成] 开始处理IPA文件，确保创建必要的签名文件...")
+            print("🔧 [下载完成] 签名信息数量: \(storeItem.sinfs.count)")
             
             Task { @MainActor in
                 IPAProcessor.shared.processIPA(at: destinationURL, withSinfs: storeItem.sinfs) { processingResult in
                 switch processingResult {
                 case .success(let processedIPA):
+                    print("✅ [IPA处理] 成功处理IPA文件: \(processedIPA.path)")
                     
                     // 添加iTunesMetadata.plist
                     Task {
                         do {
+                            print("🔧 [元数据处理] 开始为IPA添加iTunesMetadata.plist...")
                             // 安全解包metadata
                             guard let metadata = result.metadata else {
+                                print("❌ [元数据处理] metadata为空，无法创建iTunesMetadata.plist")
                                 DispatchQueue.main.async {
                                     completion(.success(result))
                                 }
                                 return
                             }
+                            
+                            print("🔧 [元数据处理] 元数据信息:")
+                            print("   - Bundle ID: \(metadata.bundleId)")
+                            print("   - Display Name: \(metadata.bundleDisplayName)")
+                            print("   - Version: \(metadata.bundleShortVersionString)")
                             
                             // 直接生成iTunesMetadata.plist
                             let finalIPA = try await self.generateiTunesMetadata(
@@ -863,16 +1039,20 @@ extension AppStoreDownloadManager {
                                 externalVersionIds: metadata.softwareVersionExternalIdentifiers
                             )
                             
+                            print("✅ [元数据处理] 成功生成iTunesMetadata.plist，最终IPA: \(finalIPA)")
+                            
                             DispatchQueue.main.async {
                                 completion(.success(result))
                             }
                         } catch {
+                            print("❌ [元数据处理] 生成iTunesMetadata.plist失败: \(error)")
                             DispatchQueue.main.async {
                                 completion(.success(result))
                             }
                         }
                     }
                 case .failure(let error):
+                    print("❌ [IPA处理] 处理失败: \(error.localizedDescription)")
                     // 即使处理失败，也返回下载结果，但记录错误
                     DispatchQueue.main.async {
                         completion(.success(result))
@@ -881,6 +1061,7 @@ extension AppStoreDownloadManager {
             }
             }
         } catch {
+            print("❌ [文件移动失败] \(error.localizedDescription)")
             DispatchQueue.main.async {
                 completion(.failure(.fileSystemError("文件移动失败: \(error.localizedDescription)")))
             }
@@ -972,25 +1153,30 @@ extension AppStoreDownloadManager {
                             completion(.failure(.networkError(NSError(domain: "DownloadManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "设备未连接到互联网，请检查网络连接后重试"]))))
                         }
                     case NSURLErrorTimedOut:
+                        print("⏱️ [网络错误] 下载超时")
                         DispatchQueue.main.async {
                             completion(.failure(.networkError(NSError(domain: "DownloadManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "下载超时，请检查网络连接后重试"]))))
                         }
                     case NSURLErrorCancelled:
+                        print("🚫 [下载取消] 下载任务已被取消")
                         DispatchQueue.main.async {
                             completion(.failure(.unknownError("下载已取消")))
                         }
                     default:
+                        print("🌐 [网络错误] 其他网络错误，错误码: \(nsError.code)")
                         DispatchQueue.main.async {
                             completion(.failure(.networkError(NSError(domain: "DownloadManager", code: -3, userInfo: [NSLocalizedDescriptionKey: "下载失败，请稍后重试"]))))
                         }
                     }
                 } else if nsError.domain == "NSCocoaErrorDomain" {
                     // 文件系统错误
+                    print("💾 [文件错误] 文件系统错误，错误码: \(nsError.code)")
                     DispatchQueue.main.async {
                         completion(.failure(.fileSystemError("文件操作失败，请确保有足够的存储空间")))
                     }
                 } else {
                     // 其他类型的错误
+                    print("❓ [未知错误] 错误域: \(nsError.domain)，错误码: \(nsError.code)")
                     DispatchQueue.main.async {
                         completion(.failure(.unknownError("下载过程中发生未知错误")))
                     }
@@ -1153,9 +1339,16 @@ extension AppStoreDownloadManager {
         at ipaPath: String,
         appInfo: DownloadAppMetadata
     ) async throws -> String {
+        print("🔧 [ZipArchive] 开始处理IPA文件: \(ipaPath)")
+        print("🔧 [ZipArchive] 应用信息:")
+        print("   - Bundle ID: \(appInfo.bundleId)")
+        print("   - Display Name: \(appInfo.bundleDisplayName)")
+        print("   - Version: \(appInfo.bundleShortVersionString)")
+        
         // 创建临时工作目录
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("IPAProcessing_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        print("🔧 [ZipArchive] 创建临时目录: \(tempDir.path)")
         
         defer {
             // 清理临时目录
@@ -1175,11 +1368,15 @@ extension AppStoreDownloadManager {
         guard success else {
             throw NSError(domain: "ZipArchiveProcessing", code: 1, userInfo: [NSLocalizedDescriptionKey: "IPA解压失败"])
         }
+        print("✅ [ZipArchive] IPA文件解压成功")
         
         // 创建iTunesMetadata.plist
+        print("🔧 [ZipArchive] 开始创建iTunesMetadata.plist...")
         try createiTunesMetadataPlist(in: extractedDir, appInfo: appInfo)
+        print("🔧 [ZipArchive] 成功创建iTunesMetadata.plist")
         
         // 重新打包IPA文件
+        print("🔧 [ZipArchive] 开始重新打包IPA文件...")
         let processedIPAPath = URL(fileURLWithPath: ipaPath).deletingLastPathComponent()
             .appendingPathComponent("processed_\(URL(fileURLWithPath: ipaPath).lastPathComponent)")
         
@@ -1187,15 +1384,22 @@ extension AppStoreDownloadManager {
         guard repackSuccess else {
             throw NSError(domain: "ZipArchiveProcessing", code: 2, userInfo: [NSLocalizedDescriptionKey: "IPA重新打包失败"])
         }
+        print("✅ [ZipArchive] IPA文件重新打包成功")
         
         // 验证处理后的文件是否存在
         guard FileManager.default.fileExists(atPath: processedIPAPath.path) else {
             throw NSError(domain: "ZipArchiveProcessing", code: 3, userInfo: [NSLocalizedDescriptionKey: "处理后的IPA文件不存在"])
         }
         
+        // 获取文件大小
+        let fileSize = try FileManager.default.attributesOfItem(atPath: processedIPAPath.path)[.size] as? Int64 ?? 0
+        print("✅ [ZipArchive] 处理后的IPA文件大小: \(ByteCountFormatter().string(fromByteCount: fileSize))")
+        
         // 替换原文件
+        print("🔧 [ZipArchive] 开始替换原文件...")
         try FileManager.default.removeItem(at: URL(fileURLWithPath: ipaPath))
         try FileManager.default.moveItem(at: processedIPAPath, to: URL(fileURLWithPath: ipaPath))
+        print("✅ [ZipArchive] 成功替换原文件")
         
         return ipaPath
         #else
@@ -1207,6 +1411,7 @@ extension AppStoreDownloadManager {
     /// 创建iTunesMetadata.plist文件
     private func createiTunesMetadataPlist(in extractedDir: URL, appInfo: DownloadAppMetadata) throws {
         let metadataPath = extractedDir.appendingPathComponent("iTunesMetadata.plist")
+        print("🔧 [ZipArchive] 准备创建iTunesMetadata.plist: \(metadataPath.path)")
         
         // 构建iTunesMetadata.plist内容
         let metadataDict: [String: Any] = [
@@ -1241,13 +1446,31 @@ extension AppStoreDownloadManager {
             "versionRestrictions": 0
         ]
         
+        print("🔧 [ZipArchive] 构建的元数据字典包含 \(metadataDict.count) 个字段")
+        print("🔧 [ZipArchive] 关键字段值:")
+        print("   - appleId: \(metadataDict["appleId"] ?? "nil")")
+        print("   - artistName: \(metadataDict["artistName"] ?? "nil")")
+        print("   - bundleId: \(metadataDict["bundleId"] ?? "nil")")
+        print("   - bundleVersion: \(metadataDict["bundleVersion"] ?? "nil")")
+        
         let plistData = try PropertyListSerialization.data(
             fromPropertyList: metadataDict,
             format: .xml,
             options: 0
         )
         
+        print("🔧 [ZipArchive] 成功序列化plist数据，大小: \(ByteCountFormatter().string(fromByteCount: Int64(plistData.count)))")
+        
         try plistData.write(to: metadataPath)
+        print("🔧 [ZipArchive] 成功写入iTunesMetadata.plist到: \(metadataPath.path)")
+        
+        // 验证文件是否真的被创建了
+        if FileManager.default.fileExists(atPath: metadataPath.path) {
+            let fileSize = try FileManager.default.attributesOfItem(atPath: metadataPath.path)[.size] as? Int64 ?? 0
+            print("✅ [ZipArchive] iTunesMetadata.plist文件确认存在，大小: \(ByteCountFormatter().string(fromByteCount: fileSize))")
+        } else {
+            print("❌ [ZipArchive] iTunesMetadata.plist文件创建失败，文件不存在")
+        }
     }
     
     /// 为IPA文件生成iTunesMetadata.plist - 强制确保每个IPA都包含元数据
@@ -1267,6 +1490,14 @@ extension AppStoreDownloadManager {
         externalVersionId: Int,
         externalVersionIds: [Int]?
     ) async throws -> String {
+        print("🔧 [iTunesMetadata] 开始为IPA文件强制生成iTunesMetadata.plist: \(ipaPath)")
+        print("🔧 [iTunesMetadata] 参数信息:")
+        print("   - Bundle ID: \(bundleId)")
+        print("   - Display Name: \(displayName)")
+        print("   - Version: \(version)")
+        print("   - External Version ID: \(externalVersionId)")
+        print("   - External Version IDs: \(externalVersionIds ?? [])")
+        
         // 构建iTunesMetadata.plist内容
         let metadataDict: [String: Any] = [
             "appleId": bundleId,
@@ -1300,14 +1531,19 @@ extension AppStoreDownloadManager {
             "versionRestrictions": 0
         ]
         
+        print("🔧 [iTunesMetadata] 构建的元数据字典包含 \(metadataDict.count) 个字段")
+        
         let plistData = try PropertyListSerialization.data(
             fromPropertyList: metadataDict,
             format: .xml,
             options: 0
         )
         
+        print("🔧 [iTunesMetadata] 成功生成plist数据，大小: \(ByteCountFormatter().string(fromByteCount: Int64(plistData.count)))")
+        
         // 强制使用ZipArchive处理IPA文件，确保iTunesMetadata.plist被添加
         do {
+            print("🔧 [iTunesMetadata] 尝试使用ZipArchive处理IPA文件...")
             let appInfo = DownloadAppMetadata(
                 bundleId: bundleId,
                 bundleDisplayName: displayName,
@@ -1317,9 +1553,13 @@ extension AppStoreDownloadManager {
             )
             
             let processedIPA = try await processIPAWithZipArchive(at: ipaPath, appInfo: appInfo)
+            print("✅ [iTunesMetadata] 成功使用ZipArchive处理IPA文件: \(processedIPA)")
             return processedIPA
             
         } catch {
+            print("❌ [iTunesMetadata] ZipArchive处理失败: \(error)")
+            print("🔄 [iTunesMetadata] 尝试备用方案：直接解压并添加iTunesMetadata.plist")
+            
             // 备用方案：直接解压IPA，添加iTunesMetadata.plist，然后重新打包
             return try await fallbackAddiTunesMetadata(to: ipaPath, plistData: plistData)
         }
@@ -1327,6 +1567,7 @@ extension AppStoreDownloadManager {
     
     /// 备用方案：直接解压IPA并添加iTunesMetadata.plist
     private func fallbackAddiTunesMetadata(to ipaPath: String, plistData: Data) async throws -> String {
+        print("🔄 [备用方案] 开始直接处理IPA文件")
         
         #if canImport(ZipArchive)
         // 创建临时工作目录
@@ -1373,9 +1614,16 @@ extension AppStoreDownloadManager {
             throw NSError(domain: "FallbackIPAProcessing", code: 3, userInfo: [NSLocalizedDescriptionKey: "处理后的IPA文件不存在"])
         }
         
+        // 获取文件大小
+        let fileSize = try FileManager.default.attributesOfItem(atPath: processedIPAPath.path)[.size] as? Int64 ?? 0
+        print("✅ [备用方案] 处理后的IPA文件大小: \(ByteCountFormatter().string(fromByteCount: fileSize))")
+        
         // 替换原文件
+        print("🔧 [备用方案] 开始替换原文件...")
         try FileManager.default.removeItem(at: ipaURL)
         try FileManager.default.moveItem(at: processedIPAPath, to: ipaURL)
+        
+        print("✅ [备用方案] 原IPA文件已成功替换为包含iTunesMetadata.plist的版本")
         return ipaURL.path
         
         #else

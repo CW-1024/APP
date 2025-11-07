@@ -1,26 +1,39 @@
+//
+//  AppStore.swift
+//
+//  Created by pxx917144686 on 2025/08/20.
+//
 import Foundation
 import SwiftUI
 import Combine
-
+/// 应用商店管理类，负责多账户管理和全局配置
 @MainActor
 class AppStore: ObservableObject {
+    /// 单例实例
     static let this = AppStore()
+    /// 所有已保存的账户列表
     @Published var savedAccounts: [Account] = []
+    /// 当前选中的账户
     @Published var selectedAccount: Account? = nil
+    /// 当前选中的账户索引
     @Published var selectedAccountIndex: Int = 0
-    
+    /// 初始化，确保单例模式
     private init() {
         loadAccounts()
     }
-    
+    /// 设置GUID
     func setupGUID() {
+        // 设置应用的唯一标识符
+        // 这里可以实现GUID的设置逻辑
     }
-    
+    /// 加载所有保存的账户数据
     private func loadAccounts() {
+        // 从 AuthenticationManager 加载所有保存的账户
         let allAccounts = AuthenticationManager.shared.loadAllSavedAccounts()
         savedAccounts = allAccounts
         
         if !allAccounts.isEmpty {
+            // 设置第一个账户为默认选中账户
             selectedAccount = allAccounts.first
             selectedAccountIndex = 0
             print("[AppStore] 加载了 \(allAccounts.count) 个账户")
@@ -197,5 +210,5 @@ class AppStore: ObservableObject {
 }
 // MARK: - Account 模型
 extension AppStore {
-    // 账户结构体已移至 AuthenticationManager.swift 以避免重复
+    // Account struct moved to AuthenticationManager.swift to avoid duplication
 }

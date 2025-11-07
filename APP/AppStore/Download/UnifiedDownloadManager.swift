@@ -9,6 +9,11 @@ import Foundation
 import SwiftUI
 import Combine
 
+
+// DownloadManager.swift 包含 DownloadStatus 等类型定义
+// AppStore.swift 包含 AppStore 类定义
+// AuthenticationManager.swift 包含 AuthenticationManager 和 Account 类型
+
 /// 底层下载和UI层管理
 @MainActor
 class UnifiedDownloadManager: ObservableObject, @unchecked Sendable {
@@ -104,7 +109,7 @@ class UnifiedDownloadManager: ObservableObject, @unchecked Sendable {
         print("✅ [进度重置] 进度已重置为: \(request.runtime.progressValue)")
         
         Task {
-            guard let account = AuthenticationManager.shared.loadSavedAccount() else {
+            guard let account = AppStore.this.selectedAccount else {
                 await MainActor.run {
                     request.runtime.error = "请先添加Apple ID账户"
                     request.runtime.status = .failed
@@ -120,7 +125,7 @@ class UnifiedDownloadManager: ObservableObject, @unchecked Sendable {
             // 确保认证状态
             AuthenticationManager.shared.setCookies(account.cookies)
             
-            // Account结构体
+            // 借鉴旧代码的成功实现 - 使用正确的Account结构体
             let storeAccount = Account(
                 name: account.email,
                 email: account.email,

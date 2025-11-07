@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-// 提供UIUserInterfaceStyle的所有情况
+// Extension to provide all cases for UIUserInterfaceStyle
 private extension UIUserInterfaceStyle {
     static var allStyles: [UIUserInterfaceStyle] {
         return [.unspecified, .light, .dark]

@@ -11,6 +11,7 @@
 		8568CB192E768AC1003A3E08 /* NukeExtensions in Frameworks */ = {isa = PBXBuildFile; productRef = 8568CB182E768AC1003A3E08 /* NukeExtensions */; };
 		8568CB1B2E768AC1003A3E08 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 8568CB1A2E768AC1003A3E08 /* NukeUI */; };
 		8568CB1D2E768AC1003A3E08 /* NukeVideo in Frameworks */ = {isa = PBXBuildFile; productRef = 8568CB1C2E768AC1003A3E08 /* NukeVideo */; };
+		8568D3262E769115003A3E08 /* OpenSSL in Frameworks */ = {isa = PBXBuildFile; productRef = 8568D3252E769115003A3E08 /* OpenSSL */; };
 		859304CE2E76A99D00D0052E /* ZsignSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 859304CD2E76A99D00D0052E /* ZsignSwift */; };
 		859304D02E76A99D00D0052E /* zsign in Frameworks */ = {isa = PBXBuildFile; productRef = 859304CF2E76A99D00D0052E /* zsign */; };
 		85A1B2C52E6F123400D4E5F6 /* ZipArchive in Frameworks */ = {isa = PBXBuildFile; productRef = 85A1B2C42E6F123400D4E5F6 /* ZipArchive */; };
@@ -70,6 +71,7 @@
 				85FCEE922E6B374E0069A30A /* ZIPFoundation in Frameworks */,
 				8568CB192E768AC1003A3E08 /* NukeExtensions in Frameworks */,
 				8568CB172E768AC1003A3E08 /* Nuke in Frameworks */,
+				8568D3262E769115003A3E08 /* OpenSSL in Frameworks */,
 				8568CB1D2E768AC1003A3E08 /* NukeVideo in Frameworks */,
 				8568CB1B2E768AC1003A3E08 /* NukeUI in Frameworks */,
 				85A1B2C52E6F123400D4E5F6 /* ZipArchive in Frameworks */,
@@ -135,6 +137,7 @@
 				8568CB182E768AC1003A3E08 /* NukeExtensions */,
 				8568CB1A2E768AC1003A3E08 /* NukeUI */,
 				8568CB1C2E768AC1003A3E08 /* NukeVideo */,
+				8568D3252E769115003A3E08 /* OpenSSL */,
 				859304CD2E76A99D00D0052E /* ZsignSwift */,
 				859304CF2E76A99D00D0052E /* zsign */,
 			);
@@ -214,6 +217,7 @@
 				85EC5D152E7688C1006D9773 /* XCRemoteSwiftPackageReference "Nuke" */,
 				85EC5D242E76890C006D9773 /* XCRemoteSwiftPackageReference "ArArchiveKit" */,
 				85EC5D272E76891C006D9773 /* XCRemoteSwiftPackageReference "AltSourceKit" */,
+				8568D3242E769115003A3E08 /* XCRemoteSwiftPackageReference "OpenSSL" */,
 				859304CC2E76A99D00D0052E /* XCRemoteSwiftPackageReference "Zsign" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -418,6 +422,7 @@
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "APP/Supporting Files/APP-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -470,6 +475,7 @@
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "SERVER $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "APP/Supporting Files/APP-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -499,6 +505,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		8568D3242E769115003A3E08 /* XCRemoteSwiftPackageReference "OpenSSL" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzyzanowskim/OpenSSL.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.3.3001;
+			};
+		};
 		859304CC2E76A99D00D0052E /* XCRemoteSwiftPackageReference "Zsign" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pxx917144686/Zsign";
@@ -585,6 +599,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 85EC5D152E7688C1006D9773 /* XCRemoteSwiftPackageReference "Nuke" */;
 			productName = NukeVideo;
+		};
+		8568D3252E769115003A3E08 /* OpenSSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8568D3242E769115003A3E08 /* XCRemoteSwiftPackageReference "OpenSSL" */;
+			productName = OpenSSL;
 		};
 		859304CD2E76A99D00D0052E /* ZsignSwift */ = {
 			isa = XCSwiftPackageProductDependency;

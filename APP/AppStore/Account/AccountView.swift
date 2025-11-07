@@ -35,7 +35,7 @@ struct AccountView: View {
                         VStack(spacing: 30) {
                             Spacer()
                             VStack(spacing: 20) {
-                                // 带动画的Logo - 修复动画问题
+                                // Logo with Animation - 修复动画问题
                                 Image(systemName: "person.circle.fill")
                                     .resizable()
                                     .scaledToFit()
@@ -47,7 +47,7 @@ struct AccountView: View {
                                         Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true), // 减少动画时长
                                         value: animation
                                     )
-                                // 欢迎文本
+                                // Welcome Text
                                 VStack(spacing: 12) {
                                     Text("Apple ID")
                                         .font(.title)
@@ -59,7 +59,7 @@ struct AccountView: View {
                                         .multilineTextAlignment(.center)
                                 }
                             }
-                            // 添加账户按钮
+                            // Add Account Button
                             Button(action: { addSheet.toggle() }) {
                                 HStack(spacing: 10) {
                                     Image(systemName: "plus.circle.fill")
@@ -198,7 +198,7 @@ struct AccountView: View {
     }
 }
 
-// MARK: - 账户行视图
+// MARK: - Account Row View
 struct AccountRowView: View {
     let account: Any
     @EnvironmentObject var themeManager: ThemeManager

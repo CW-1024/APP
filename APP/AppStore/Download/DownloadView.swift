@@ -931,6 +931,7 @@ struct DownloadView: SwiftUIView {
                     value: animateCards
                 )
             
+            // 关于代码作者按钮 - 限制宽度的设计
             Button(action: {
                 guard let url = URL(string: "https://github.com/pxx917144686"),
                     UIApplication.shared.canOpenURL(url) else {
@@ -1298,29 +1299,11 @@ struct DownloadCardView: SwiftUIView {
                         }
                     }
                     
-                    // 显示文件路径，并增加文件是否存在的提示
-                    if let localFilePath = request.localFilePath {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(localFilePath)
-                                .font(.caption2)
-                                .foregroundColor(FileManager.default.fileExists(atPath: localFilePath) ? .secondary : .red)
-                                .multilineTextAlignment(.leading)
-                                .padding(.leading, 16)
-                            
-                            if !FileManager.default.fileExists(atPath: localFilePath) {
-                                Text("⚠️ 文件已丢失，请重新下载")
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
-                                    .padding(.leading, 16)
-                            }
-                        }
-                    } else {
-                        Text("未知路径")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .padding(.leading, 16)
-                    }
+                    Text(request.localFilePath ?? "未知路径")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .padding(.leading, 16) // 缩进对齐
                 }
                 .padding(.horizontal, 4)
             }
